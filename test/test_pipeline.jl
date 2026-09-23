@@ -293,7 +293,7 @@ end
     # The same ordering MatrixFreeOperators' own flat vectors use, which is what makes
     # `du .+= stim.(xs, t)` line up with `mul!(du, P, u)`.
     field = MatrixFreeOperators.set!(
-        MatrixFreeOperators.scalar_field(grid), x -> x[1] + 10 * x[2]
+        x -> x[1] + 10 * x[2], MatrixFreeOperators.scalar_field(grid)
     )
     @test MatrixFreeOperators.flatten(field) ≈ [x[1] + 10 * x[2] for x in xs]
 end
