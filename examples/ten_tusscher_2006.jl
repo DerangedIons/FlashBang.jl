@@ -10,11 +10,11 @@
 # MatrixFreeOperators.jl's `examples/ten_tusscher_2006.jl`; what is new here is the
 # CytoZoo interface wrapped around it. That interface flattens the layout: MFO kept `V`
 # out of the state vector because its tissue solver carried voltage in its own field,
-# whereas a CytoZoo model owns all 19 states and Lightning's state-blocked layout gives
+# whereas a CytoZoo model owns all 19 states and FlashBang's state-blocked layout gives
 # the diffusion half the leading `V` block for free.
 #
 # Float64 only. The published constants are `Float64` literals and are left that way —
-# `Float32` monodomain is not a supported configuration (see the Lightning README).
+# `Float32` monodomain is not a supported configuration (see the FlashBang README).
 #
 # Lives in `examples/` rather than in CytoZoo because it is here to drive a benchmark.
 # Promoting it to the zoo is a separate conversation.
@@ -381,7 +381,7 @@ function CytoZoo.default_initial_state(::TenTusscherEpi)
     return u
 end
 
-# `u` arrives as a strided view into Lightning's state-blocked solution vector, so the
+# `u` arrives as a strided view into FlashBang's state-blocked solution vector, so the
 # gating states are gathered into an `SVector` before `rhs` sees them — that is what lets
 # the kinetics stay a pure function over a stack value, exactly as in the MFO port.
 @inline _gather_states(u) = SVector{NSTATES,Float64}(ntuple(k -> u[k + 1], Val(NSTATES)))

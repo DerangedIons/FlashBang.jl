@@ -10,16 +10,16 @@
 # It curls around the free end and locks into a rotating spiral — the mechanism behind
 # reentrant arrhythmia, and the reason a wave that should have left the tissue never does.
 #
-# This is the Lightning port of MatrixFreeOperators.jl's `examples/monodomain_amr.jl`.
+# This is the FlashBang port of MatrixFreeOperators.jl's `examples/monodomain_amr.jl`.
 # Two differences worth naming:
 #
-#   * **Uniform grid, not an adaptive forest.** Lightning is structured-grid-only by
+#   * **Uniform grid, not an adaptive forest.** FlashBang is structured-grid-only by
 #     design, so there is no `regrid!` and no cell saving to report. The MFO example
 #     exists partly to measure what AMR buys; this one exists to show the physics through
-#     Lightning's API.
+#     FlashBang's API.
 #   * **The stimulus is a current, not a state reset.** MFO writes `V = 1` into the
 #     stimulated cells directly. Here S1 and S2 are `TransmembraneStimulationProtocol`
-#     pulses entering the diffusion half as a source term, which is how Lightning models
+#     pulses entering the diffusion half as a source term, which is how FlashBang models
 #     stimulation — one protocol, one sign convention, in every dimension.
 #
 # Run with:   julia --project=examples -t auto examples/spiral_2d.jl
@@ -29,7 +29,7 @@
 using Pkg
 Pkg.activate(@__DIR__)
 
-using Lightning
+using FlashBang
 using OrdinaryDiffEqLowOrderRK: Euler
 using CairoMakie, Printf, Statistics
 
@@ -172,7 +172,7 @@ function panel_figure(snaps, xs, path)
     Colorbar(fig[1, ncol], hm; label="normalized transmembrane potential V")
     Label(
         fig[0, 1:ncol],
-        "Reentrant spiral from an S1–S2 cross-field protocol — Lightning on a uniform grid";
+        "Reentrant spiral from an S1–S2 cross-field protocol — FlashBang on a uniform grid";
         fontsize=24,
         font=:bold,
         padding=(0, 0, 2, 0),

@@ -1,5 +1,5 @@
 # A propagating action potential on a one-dimensional cable — the smallest complete
-# Lightning problem, and the shape every larger one keeps.
+# FlashBang problem, and the shape every larger one keeps.
 #
 #   χCₘ∂ₜφₘ = ∇⋅κ∇φₘ + χ(Iᵢₒₙ + Iₛₜᵢₘ),   ∂ₜs = f(φₘ, s)
 #
@@ -21,7 +21,7 @@
 using Pkg
 Pkg.activate(@__DIR__)
 
-using Lightning
+using FlashBang
 using CytoZoo: FHNModel
 using OrdinaryDiffEqLowOrderRK: Euler
 using CairoMakie, Printf

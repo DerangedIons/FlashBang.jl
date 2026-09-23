@@ -19,7 +19,7 @@
 using Pkg
 Pkg.activate(@__DIR__)
 
-using Lightning
+using FlashBang
 using OrdinaryDiffEqLowOrderRK: Euler
 using CairoMakie, Printf
 
@@ -172,7 +172,7 @@ Colorbar(
 )
 Label(
     fig[0, 1:2],
-    "Niederer et al. 2011 N-version benchmark — Lightning.jl";
+    "Niederer et al. 2011 N-version benchmark — FlashBang.jl";
     fontsize=23,
     font=:bold,
 )

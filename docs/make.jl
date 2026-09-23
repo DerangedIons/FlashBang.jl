@@ -1,14 +1,14 @@
-using Lightning
+using FlashBang
 using Documenter
 
-DocMeta.setdocmeta!(Lightning, :DocTestSetup, :(using Lightning); recursive=true)
+DocMeta.setdocmeta!(FlashBang, :DocTestSetup, :(using FlashBang); recursive=true)
 
 makedocs(;
-    modules=[Lightning],
+    modules=[FlashBang],
     authors="Kyle Beggs (beggskw@gmail.com) and contributors",
-    sitename="Lightning.jl",
+    sitename="FlashBang.jl",
     format=Documenter.HTML(;
-        canonical="https://DerangedIons.github.io/Lightning.jl",
+        canonical="https://DerangedIons.github.io/FlashBang.jl",
         edit_link="main",
         assets=String[],
     ),
@@ -18,6 +18,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/DerangedIons/Lightning.jl",
+    repo="github.com/DerangedIons/FlashBang.jl",
     devbranch="main",
 )

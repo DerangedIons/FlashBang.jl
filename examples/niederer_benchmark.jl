@@ -13,10 +13,10 @@
 # anisotropy axis, the stimulus magnitude, the sodium kinetics, and the spatial
 # discretization all move it.
 #
-# This is the Lightning port of MatrixFreeOperators.jl's `examples/niederer_benchmark.jl`,
+# This is the FlashBang port of MatrixFreeOperators.jl's `examples/niederer_benchmark.jl`,
 # and the two are worth reading side by side. The MFO version is a hand-rolled Godunov
 # split over an adaptive block forest, written to measure what AMR buys; this one is the
-# same physics expressed through Lightning's pipeline on a uniform grid, so what it shows
+# same physics expressed through FlashBang's pipeline on a uniform grid, so what it shows
 # is the API — one `MonodomainModel`, one `semidiscretize`, one `OperatorSplittingProblem`
 # — carrying a real 19-state, three-dimensional, anisotropic problem.
 #
@@ -36,7 +36,7 @@
 using Pkg
 Pkg.activate(@__DIR__)
 
-using Lightning
+using FlashBang
 using OrdinaryDiffEqLowOrderRK: Euler
 using CairoMakie, LinearAlgebra, Printf
 
@@ -56,13 +56,13 @@ const σ_T = σ_iT * σ_eT / (σ_iT + σ_eT)   #                           0.017
 const BETA = 140.0                   # surface-to-volume ratio (1/mm)
 const CM = 0.01                      # membrane capacitance (µF/mm²)
 
-# Lightning folds κ to the diffusivity κ/(χCₘ) itself, so `κ = (σ_L, σ_T, σ_T)` with
+# FlashBang folds κ to the diffusivity κ/(χCₘ) itself, so `κ = (σ_L, σ_T, σ_T)` with
 # `χ = BETA` and `Cₘ = CM` reproduces D_L = 0.0953 mm²/ms and D_T = 0.0126 mm²/ms.
 const D_L = σ_L / (BETA * CM)
 const D_T = σ_T / (BETA * CM)
 
 # 50 000 µA/cm³ ≡ 50 µA/mm³ for 2 ms in a 1.5 mm corner cube. The protocol returns a
-# current density per unit membrane area, and Lightning applies it as Iₛₜᵢₘ/Cₘ — so
+# current density per unit membrane area, and FlashBang applies it as Iₛₜᵢₘ/Cₘ — so
 # dividing the volumetric density by β gives the 35.7 mV/ms the benchmark specifies.
 const STIM_I = 50.0 / BETA           # µA/mm², positive = depolarizing
 const STIM_DUR = 2.0                 # ms
@@ -127,7 +127,7 @@ function build_slab()
     grid = CartesianGrid(
         ((0.0, LX), (0.0, LY), (0.0, LZ)), NCELLS; bc=ntuple(_ -> (Neumann(), Neumann()), 3)
     )
-    # Axis-aligned diagonal anisotropy: Lightning assembles this as
+    # Axis-aligned diagonal anisotropy: FlashBang assembles this as
     # D_T∇² + (D_L − D_T)∂ₓₓ, one halo exchange cheaper than three second derivatives,
     # and exact because κ is diagonal. Zero-flux is the correct boundary for it:
     # n·κ∇φ = 0 reduces to ∂φ/∂n = 0 when κ is axis-aligned.
@@ -217,7 +217,7 @@ end
 #--------------------------------------------------------------------------------# Reporting
 
 function report(act_ref)
-    @printf "\n  %-4s %-22s %12s %12s %9s\n" "" "target (mm)" "Lightning" "FD ref" "Δ"
+    @printf "\n  %-4s %-22s %12s %12s %9s\n" "" "target (mm)" "FlashBang" "FD ref" "Δ"
     for k in 1:9
         p = P_REF[k]
         a = act_ref[k]
@@ -267,7 +267,7 @@ function slices_figure(snaps, grid, path)
     Colorbar(fig[1:length(snaps), 2], hm; label="transmembrane potential φₘ (mV)")
     Label(
         fig[0, 1:2],
-        @sprintf("Niederer benchmark in Lightning — z = %.1f mm mid-plane", Z_SLICE);
+        @sprintf("Niederer benchmark in FlashBang — z = %.1f mm mid-plane", Z_SLICE);
         fontsize=23,
         font=:bold,
     )
@@ -299,7 +299,7 @@ function activation_figure(dist, at_diag, path)
         ylabel="activation time (ms)",
         title="Activation along the slab diagonal",
     )
-    lines!(ax, dist, at_diag; color=Makie.wong_colors()[1], linewidth=3, label="Lightning")
+    lines!(ax, dist, at_diag; color=Makie.wong_colors()[1], linewidth=3, label="FlashBang")
 
     # Only the reference points that actually lie on this diagonal belong here — P1, the
     # centre P9, and the far corner P8. The other six are corners off the line; they are
@@ -340,7 +340,7 @@ end
 
 grid, f = build_slab()
 
-@printf "Niederer 2011 benchmark in Lightning — %s\n" (
+@printf "Niederer 2011 benchmark in FlashBang — %s\n" (
     SMOKE ? "SMOKE mode (coarse and short; not the benchmark answer)" : "full run"
 )
 @printf "  slab %.0f × %.0f × %.0f mm, D = (%.5f, %.5f, %.5f) mm²/ms, fibres along x\n" LX LY LZ D_L D_T D_T

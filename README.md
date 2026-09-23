@@ -1,13 +1,13 @@
-# Lightning.jl
+# FlashBang.jl
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://DerangedIons.github.io/Lightning.jl/stable/)
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://DerangedIons.github.io/Lightning.jl/dev/)
-[![Build Status](https://github.com/DerangedIons/Lightning.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/DerangedIons/Lightning.jl/actions/workflows/CI.yml?query=branch%3Amain)
-[![Coverage](https://codecov.io/gh/DerangedIons/Lightning.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/DerangedIons/Lightning.jl)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://DerangedIons.github.io/FlashBang.jl/stable/)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://DerangedIons.github.io/FlashBang.jl/dev/)
+[![Build Status](https://github.com/DerangedIons/FlashBang.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/DerangedIons/FlashBang.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Coverage](https://codecov.io/gh/DerangedIons/FlashBang.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/DerangedIons/FlashBang.jl)
 
 Cardiac tissue electrophysiology on orthogonal, structured grids.
 
-Lightning solves the monodomain equation
+FlashBang solves the monodomain equation
 
 ```math
 \begin{aligned}
@@ -45,7 +45,7 @@ conduction-velocity and pseudo-ECG post-processing.
 ## The pipeline
 
 ```julia
-using Lightning
+using FlashBang
 using CytoZoo: FHNModel
 using OrdinaryDiffEqLowOrderRK: Euler
 
@@ -144,5 +144,5 @@ unregistered dependencies:
 using Pkg
 Pkg.develop(url = "https://github.com/RallypointOne/MatrixFreeOperators.jl")
 Pkg.develop(url = "https://github.com/DerangedIons/CytoZoo.jl")
-Pkg.develop(url = "https://github.com/DerangedIons/Lightning.jl")
+Pkg.develop(url = "https://github.com/DerangedIons/FlashBang.jl")
 ```

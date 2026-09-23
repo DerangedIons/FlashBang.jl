@@ -95,9 +95,9 @@ jobs:
               PackageSpec(url="https://github.com/DerangedIons/CytoZoo.jl"),
           ])
       - uses: julia-actions/julia-buildpkg@v1
-      # Lightning is itself a dep of the docs project and is also unregistered, so all
+      # FlashBang is itself a dep of the docs project and is also unregistered, so all
       # three have to enter in one resolve — adding just the two upstreams fails with
-      # `expected package Lightning [076478a6] to be registered`.
+      # `expected package FlashBang [076478a6] to be registered`.
       - name: Add unregistered dependencies to the docs environment
         shell: julia --color=yes --project=docs {0}
         run: |
@@ -115,6 +115,6 @@ jobs:
         shell: julia --project=docs --color=yes {0}
         run: |
           using Documenter: DocMeta, doctest
-          using Lightning
-          DocMeta.setdocmeta!(Lightning, :DocTestSetup, :(using Lightning); recursive=true)
-          doctest(Lightning)
+          using FlashBang
+          DocMeta.setdocmeta!(FlashBang, :DocTestSetup, :(using FlashBang); recursive=true)
+          doctest(FlashBang)

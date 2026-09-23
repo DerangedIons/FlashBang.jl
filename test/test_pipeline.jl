@@ -85,7 +85,7 @@ end
 
     u = create_initial_condition(f)         # flat rest, so diffusion contributes nothing
     du = fill(NaN, n)
-    Lightning._diffusion_function(f)(du, view(u, 1:n), nothing, 0.0)
+    FlashBang._diffusion_function(f)(du, view(u, 1:n), nothing, 0.0)
 
     stimulated = [x[1] <= 2.0 for x in xs]
     @test all(du[stimulated] .≈ 3.0)                 # Cₘ = 1
@@ -95,7 +95,7 @@ end
     # Outside the declared window the whole evaluation is skipped, so the result is the
     # pure diffusion of a flat field: zero.
     fill!(du, NaN)
-    Lightning._diffusion_function(f)(du, view(u, 1:n), nothing, 5.0)
+    FlashBang._diffusion_function(f)(du, view(u, 1:n), nothing, 5.0)
     @test all(iszero, du)
 
     # Cₘ divides the applied current.
@@ -104,7 +104,7 @@ end
         ReactionDiffusionSplit(model), FiniteDifferenceDiscretization(), PIPELINE_GRID
     )
     du2 = fill(NaN, n)
-    Lightning._diffusion_function(f2)(
+    FlashBang._diffusion_function(f2)(
         du2, view(create_initial_condition(f2), 1:n), nothing, 0.0
     )
     @test all(du2[stimulated] .≈ 1.5)
@@ -113,16 +113,16 @@ end
 @testset "Pipeline — NoStimulationProtocol is a dispatch, not a branch" begin
     f = fhn_pipeline()
     n = num_nodes(f)
-    diffusion = Lightning._diffusion_function(f)
+    diffusion = FlashBang._diffusion_function(f)
 
     @test diffusion.stim isa NoStimulationProtocol
-    @test !Lightning.is_active(diffusion.stim, 0.0)
+    @test !FlashBang.is_active(diffusion.stim, 0.0)
 
     # `apply_stimulus!` on the no-stimulus path returns `du` untouched — the evaluation is
     # removed, not multiplied by zero.
     du = rand(n)
     reference = copy(du)
-    @test Lightning.apply_stimulus!(du, diffusion.stim, node_coordinates(f), 1.0, 0.0) ===
+    @test FlashBang.apply_stimulus!(du, diffusion.stim, node_coordinates(f), 1.0, 0.0) ===
         du
     @test du == reference
 
@@ -149,8 +149,8 @@ end
     n = num_nodes(f)
     u = create_initial_condition(f)
     du = similar(u)
-    diffusion = Lightning._diffusion_function(f)
-    reaction = Lightning._reaction_function(f)
+    diffusion = FlashBang._diffusion_function(f)
+    reaction = FlashBang._reaction_function(f)
 
     @test @inferred(diffusion(view(du, 1:n), view(u, 1:n), nothing, 0.0)) === nothing
     @test @inferred(reaction(du, u, nothing, 0.0)) === nothing
@@ -159,7 +159,7 @@ end
     fo = fhn_pipeline(; overrides=(a=SpatialStep(1, 5.0, 0.05, 0.2),))
     uo = create_initial_condition(fo)
     duo = similar(uo)
-    reaction_o = Lightning._reaction_function(fo)
+    reaction_o = FlashBang._reaction_function(fo)
     @test @inferred(reaction_o(duo, uo, nothing, 0.0)) === nothing
 end
 
@@ -174,7 +174,7 @@ end
     u = create_initial_condition(f)
     setvariable!(u, f, :φₘ, 0.2)                     # between the two thresholds
     du = fill(NaN, 2n)
-    Lightning._reaction_function(f)(du, u, nothing, 0.0)
+    FlashBang._reaction_function(f)(du, u, nothing, 0.0)
 
     dφ = view(du, 1:n)
     left = [x[1] <= 5.0 for x in xs]
@@ -186,7 +186,7 @@ end
     uplain = create_initial_condition(fplain)
     setvariable!(uplain, fplain, :φₘ, 0.2)
     duplain = fill(NaN, 2n)
-    Lightning._reaction_function(fplain)(duplain, uplain, nothing, 0.0)
+    FlashBang._reaction_function(fplain)(duplain, uplain, nothing, 0.0)
     @test all(view(duplain, 1:n) .> 0)
 end
 
@@ -259,22 +259,22 @@ end
 
 @testset "Pipeline — stimulus protocol activity windows" begin
     always = TransmembraneStimulationProtocol((x, t) -> 1.0)
-    @test Lightning.is_active(always, -1.0)
-    @test Lightning.is_active(always, 1.0e6)
+    @test FlashBang.is_active(always, -1.0)
+    @test FlashBang.is_active(always, 1.0e6)
 
     windowed = TransmembraneStimulationProtocol(
         (x, t) -> 1.0; nonzero_intervals=((0.0, 2.0), (500.0, 502.0))
     )
-    @test Lightning.is_active(windowed, 0.0)
-    @test Lightning.is_active(windowed, 2.0)
-    @test !Lightning.is_active(windowed, 2.5)
-    @test Lightning.is_active(windowed, 501.0)
-    @test !Lightning.is_active(windowed, 600.0)
+    @test FlashBang.is_active(windowed, 0.0)
+    @test FlashBang.is_active(windowed, 2.0)
+    @test !FlashBang.is_active(windowed, 2.5)
+    @test FlashBang.is_active(windowed, 501.0)
+    @test !FlashBang.is_active(windowed, 600.0)
 
     # Stored as a Tuple, not a Vector, so the protocol stays isbits for a GPU broadcast.
     @test windowed.nonzero_intervals isa Tuple
     @test isbitstype(typeof(windowed))
-    @test !Lightning.is_active(NoStimulationProtocol(), 0.0)
+    @test !FlashBang.is_active(NoStimulationProtocol(), 0.0)
     @test NoStimulationProtocol()(nothing, 0.0) == 0
 end
 

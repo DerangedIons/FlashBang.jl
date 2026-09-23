@@ -46,13 +46,13 @@ if GPU_AVAILABLE
 
         # Each half separately first, so a mismatch says which one.
         du_cpu, du_gpu = similar(u_cpu), similar(u_gpu)
-        Lightning._reaction_function(f_cpu)(du_cpu, u_cpu, nothing, 0.0)
-        Lightning._reaction_function(f_gpu)(du_gpu, u_gpu, nothing, 0.0)
+        FlashBang._reaction_function(f_cpu)(du_cpu, u_cpu, nothing, 0.0)
+        FlashBang._reaction_function(f_gpu)(du_gpu, u_gpu, nothing, 0.0)
         @test Array(du_gpu) ≈ du_cpu
 
         dφ_cpu, dφ_gpu = similar(u_cpu, n), similar(u_gpu, n)
-        Lightning._diffusion_function(f_cpu)(dφ_cpu, view(u_cpu, 1:n), nothing, 0.0)
-        Lightning._diffusion_function(f_gpu)(dφ_gpu, view(u_gpu, 1:n), nothing, 0.0)
+        FlashBang._diffusion_function(f_cpu)(dφ_cpu, view(u_cpu, 1:n), nothing, 0.0)
+        FlashBang._diffusion_function(f_gpu)(dφ_gpu, view(u_gpu, 1:n), nothing, 0.0)
         @test Array(dφ_gpu) ≈ dφ_cpu
 
         # Then a real (short) solve through the splitting integrator.
@@ -96,8 +96,8 @@ if GPU_AVAILABLE
         u_gpu = CuArray(u_cpu)
 
         du_cpu, du_gpu = similar(u_cpu), similar(u_gpu)
-        Lightning._reaction_function(f_cpu)(du_cpu, u_cpu, nothing, 0.0)
-        Lightning._reaction_function(f_gpu)(du_gpu, u_gpu, nothing, 0.0)
+        FlashBang._reaction_function(f_cpu)(du_cpu, u_cpu, nothing, 0.0)
+        FlashBang._reaction_function(f_gpu)(du_gpu, u_gpu, nothing, 0.0)
 
         @test Array(du_gpu) ≈ du_cpu
         # And the override is actually doing something, so parity is not parity-on-zero.

@@ -1,21 +1,21 @@
 [deps]
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 CytoZoo = "ff4ab244-b974-488c-a5cc-2c6c87261b37"
-Lightning = "076478a6-6ac3-4d94-9ef3-ef1796748abb"
+FlashBang = "076478a6-6ac3-4d94-9ef3-ef1796748abb"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 # Listed only so its [sources] entry resolves — the examples reach MatrixFreeOperators
-# through Lightning's re-exports and never import it directly.
+# through FlashBang's re-exports and never import it directly.
 MatrixFreeOperators = "bf251007-91fc-422b-8727-f8d5215c1c76"
 OrdinaryDiffEqLowOrderRK = "1344f307-1e59-4825-a18e-ace9aa3fa4c6"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
-# Lightning, CytoZoo, and MatrixFreeOperators are unregistered, so they need explicit
-# sources. Lightning travels with this checkout and resolves by path; the other two come
+# FlashBang, CytoZoo, and MatrixFreeOperators are unregistered, so they need explicit
+# sources. FlashBang travels with this checkout and resolves by path; the other two come
 # from their repos, so `Pkg.instantiate()` works for anyone cloning rather than only on a
 # machine whose `JULIA_PKG_DEVDIR` happens to hold sibling checkouts.
 [sources]
 CytoZoo = {url = "https://github.com/DerangedIons/CytoZoo.jl", rev = "main"}
-Lightning = {path = ".."}
+FlashBang = {path = ".."}
 MatrixFreeOperators = {url = "https://github.com/RallypointOne/MatrixFreeOperators.jl", rev = "main"}

@@ -1,12 +1,12 @@
 ```@meta
-CurrentModule = Lightning
+CurrentModule = FlashBang
 ```
 
-# Lightning.jl
+# FlashBang.jl
 
 Cardiac tissue electrophysiology on orthogonal, structured grids.
 
-Lightning solves the monodomain equation
+FlashBang solves the monodomain equation
 
 ```math
 \begin{aligned}
@@ -25,7 +25,7 @@ the splitting.
 Restricting the domain to orthogonal structured grids is the design, not a limitation waiting
 to be lifted: it is what makes the spatial operators matrix-free and what lets the same source
 run on a GPU. Unstructured meshes are [Thunderbolt.jl](https://github.com/JuliaHealth/Thunderbolt.jl)'s
-job. Lightning's pipeline is nevertheless congruent with Thunderbolt's by convention — same
+job. FlashBang's pipeline is nevertheless congruent with Thunderbolt's by convention — same
 names, same shapes — while depending on none of it.
 
 ## The pipeline
@@ -40,7 +40,7 @@ Four objects, in order.
 | 4 | [`semidiscretize`](@ref) | assembles a `GenericSplitFunction` ready for `OperatorSplittingProblem` |
 
 ```julia
-using Lightning
+using FlashBang
 using CytoZoo: FHNModel
 using OrdinaryDiffEqLowOrderRK: Euler
 
@@ -76,7 +76,7 @@ Run with `julia --project=examples -t auto examples/<name>.jl`.
 The last two are ports of the corresponding MatrixFreeOperators.jl examples, which run the
 same physics on an adaptive block forest through a hand-rolled Godunov split. Reading a pair
 side by side shows what the pipeline buys and what the structured-grid restriction costs —
-Lightning carries every cell at the finest spacing, where the forest carries roughly a fifth
+FlashBang carries every cell at the finest spacing, where the forest carries roughly a fifth
 of them.
 
 Their cell models live in `examples/` rather than in CytoZoo because they exist to drive
@@ -126,5 +126,5 @@ KernelAbstractions kernel over the nodes, which requires the cell model to be is
 ```
 
 ```@autodocs
-Modules = [Lightning]
+Modules = [FlashBang]
 ```

@@ -1,5 +1,5 @@
 """
-    Lightning
+    FlashBang
 
 Cardiac tissue electrophysiology on orthogonal, structured grids.
 
@@ -20,7 +20,7 @@ operators; unstructured meshes are Thunderbolt's job, not this package's.
 See also: [`MonodomainModel`](@ref), [`semidiscretize`](@ref),
 [`create_initial_condition`](@ref).
 """
-module Lightning
+module FlashBang
 
 using Adapt: Adapt
 using LinearAlgebra: mul!
@@ -61,14 +61,14 @@ include("reaction.jl")
 include("semidiscretize.jl")
 include("solution.jl")
 
-# Lightning's own vocabulary
+# FlashBang's own vocabulary
 export AbstractEPModel, MonodomainModel, ReactionDiffusionSplit
 export AbstractStimulationProtocol, NoStimulationProtocol, TransmembraneStimulationProtocol
 export FiniteDifferenceDiscretization, semidiscretize, diffusion_operator, node_coordinates
 export create_initial_condition,
     getvariable, setvariable!, solution_size, num_nodes, variable_range
 
-# Re-exported mesh vocabulary, so `using Lightning` is enough to build a problem.
+# Re-exported mesh vocabulary, so `using FlashBang` is enough to build a problem.
 export CartesianGrid, Dirichlet, Neumann, Periodic
 export boundary_conditions, cell_center, dimension, interior, local_size, spacing
 

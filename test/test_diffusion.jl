@@ -111,7 +111,7 @@ end
     xs = node_coordinates(grid)
     φ = cosine_mode(grid).(xs)
     du = similar(φ)
-    Lightning._diffusion_function(f)(du, φ, nothing, 0.0)
+    FlashBang._diffusion_function(f)(du, φ, nothing, 0.0)
 
     expected = -discrete_decay_rate(κ_eff, grid) .* φ
     err = maximum(abs, du .- expected)

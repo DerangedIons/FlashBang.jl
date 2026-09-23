@@ -1,4 +1,4 @@
-using Lightning
+using FlashBang
 using Test
 using JET
 
@@ -14,13 +14,13 @@ using OrdinaryDiffEqLowOrderRK: Euler
 
 include("testutils.jl")
 
-@testset "Lightning.jl" begin
+@testset "FlashBang.jl" begin
     @testset "Code linting (JET.jl)" begin
         # `target_modules` rather than the template's `target_defined_modules = true`: JET
         # 0.12 dropped that configuration name (it validates configs strictly and throws a
         # `JETConfigError`). This is the same restriction — report only problems inside
-        # Lightning's own module context, not inside its dependencies.
-        JET.test_package(Lightning; target_modules=(Lightning,))
+        # FlashBang's own module context, not inside its dependencies.
+        JET.test_package(FlashBang; target_modules=(FlashBang,))
     end
     include("test_pipeline.jl")
     include("test_diffusion.jl")

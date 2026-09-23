@@ -1,6 +1,6 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-Lightning = "076478a6-6ac3-4d94-9ef3-ef1796748abb"
+FlashBang = "076478a6-6ac3-4d94-9ef3-ef1796748abb"
 
 [compat]
 Documenter = "1.17.0"
