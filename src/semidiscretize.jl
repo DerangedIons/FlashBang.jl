@@ -66,12 +66,14 @@ The result is a two-operator `GenericSplitFunction`:
 
 | operator | dof range | right-hand side |
 |---|---|---|
-| 1 | `1:N` | [`DiffusionFunction`](@ref) — `∇⋅(κ/(χCₘ))∇φₘ + Iₛₜᵢₘ/Cₘ` |
+| 1 | `(k-1)N+1:kN` | [`DiffusionFunction`](@ref) — `∇⋅(κ/(χCₘ))∇φₘ + Iₛₜᵢₘ/Cₘ` |
 | 2 | `1:N*M` | [`PointwiseODEFunction`](@ref) — the cell model at every node |
 
-with `N` nodes and `M` states. No synchronizer objects are needed: under the state-blocked
-layout the voltage block the diffusion half acts on is the *leading contiguous* range, so
-the two dof ranges overlap exactly where the physics couples them.
+with `N` nodes, `M` states, and `k = CytoZoo.transmembrane_potential_index(ion)` — `1:N`
+for the usual voltage-first model, but code generators that order states by dependency
+(gotranx) put the voltage elsewhere. No synchronizer objects are needed: under the
+state-blocked layout the voltage block the diffusion half acts on is a *contiguous* range
+wherever it sits, so the two dof ranges overlap exactly where the physics couples them.
 
 Only zero-flux (homogeneous `Neumann`) boundaries are supported in v0; anything else
 raises an `ArgumentError` naming the offending face.
@@ -106,6 +108,13 @@ function semidiscretize(
     xs = node_coordinates(grid)
     nnodes = length(xs)
     nstates = CytoZoo.num_states(model.ion)
+    k = CytoZoo.transmembrane_potential_index(model.ion)
+    1 <= k <= nstates || throw(
+        ArgumentError(
+            "the cell model reports transmembrane_potential_index = $k, outside its " *
+            "$nstates states",
+        ),
+    )
 
     diffusion = DiffusionFunction(prepared, op, grid, model.stim, T(model.Cₘ), xs)
     reaction = PointwiseODEFunction(
@@ -113,7 +122,8 @@ function semidiscretize(
     )
 
     return GenericSplitFunction(
-        (ODEFunction(diffusion), ODEFunction(reaction)), (1:nnodes, 1:(nnodes * nstates))
+        (ODEFunction(diffusion), ODEFunction(reaction)),
+        (_state_block(k, nnodes), 1:(nnodes * nstates)),
     )
 end
 
