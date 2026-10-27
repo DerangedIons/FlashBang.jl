@@ -173,7 +173,7 @@ end
 
 ## 6. Cross-cutting rules
 
-**Layout contract.** Voltage is state 1: `semidiscretize` guards `transmembrane_potential_index(ion) == 1` at setup and throws otherwise (F1 — today a model with a non-leading voltage index silently diffuses a gating variable). The index is the base's symbol-derived one, so the guard cannot disagree with the model's published names; it lives with `StateBlockedLayout` construction, and supporting other indices later is a layout generalization, not an API change.
+**Layout contract.** The voltage is state `k = transmembrane_potential_index(ion)`, not necessarily state 1 (gotranx orders states by dependency): `semidiscretize` gives the diffusion half the contiguous block `(k-1)N+1:kN` (F1 — before this, a model with a non-leading voltage index silently diffused a gating variable), and `variable_range(f, :states)` throws when `k ≠ 1` because the non-voltage states are then not one range. The index is the base's symbol-derived one, so the dof range cannot disagree with the model's published names; it moves into `StateBlockedLayout` construction when that lands.
 
 **Validation.** Declaration-level validation (positivity, symbol distinctness, interval well-formedness) lives in the base's inner constructors — implemented, closing F2 upstream. Every FlashBang-owned type follows the same rule locally: construction-time checks in inner constructors, keyword outers as thin forwards. Per the base's contract, coefficient and override values FlashBang cannot interpret are rejected at `semidiscretize`, never at solve time.
 

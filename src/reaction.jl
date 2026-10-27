@@ -9,10 +9,11 @@ The solution vector is **state-blocked** (structure of arrays):
 u = [φₘ(1:N); s₁(1:N); s₂(1:N); … ; s_{M-1}(1:N)]
 ```
 
-so node `i`'s full state is the strided slice `u[i:N:N*M]` and each *state* is contiguous.
-That layout is what makes the split cheap: the diffusion half acts on `φₘ` alone, which is
-the contiguous leading block `1:N`, so its dof range needs no synchronizer object and no
-gather/scatter. It is also the coalesced layout on a GPU — neighbouring threads read
+(drawn voltage-first; the voltage is block `CytoZoo.transmembrane_potential_index(ion)`,
+wherever the cell model puts it) so node `i`'s full state is the strided slice
+`u[i:N:N*M]` and each *state* is contiguous. That layout is what makes the split cheap: the
+diffusion half acts on `φₘ` alone, which is one contiguous block, so its dof range needs no
+synchronizer object and no gather/scatter. It is also the coalesced layout on a GPU — neighbouring threads read
 neighbouring nodes of the same state.
 
 Fields beyond the kinetics — `nnodes`, `nstates`, and the two symbols — are metadata for
