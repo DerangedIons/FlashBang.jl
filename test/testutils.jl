@@ -29,6 +29,51 @@ function (::NullIonicModel)(du, u, p, t)
 end
 
 """
+    GatedNullModel(rate; voltage_index = 1)
+
+`NullIonicModel` plus a gate: a voltage with zero kinetics and a gate `w` decaying as
+`dw/dt = -rate·w`, whose `rush_larsen_step!` is the exact exponential `w·exp(-rate·Δt)`.
+
+Two oracles in one instrument. The exact step makes any Rush–Larsen integration of the gate
+exact to rounding at every `Δt` — something no right-hand-side integrator can do, so
+agreement proves the hook is what ran. And `voltage_index = 2` puts the voltage second, as
+gotranx's dependency ordering does, with a gate in block 1 that the diffusion half must
+leave alone.
+"""
+struct GatedNullModel{T} <: CytoZoo.AbstractCardiacCellModel
+    rate::T
+    voltage_index::Int
+end
+
+GatedNullModel(rate; voltage_index::Integer=1) = GatedNullModel(rate, Int(voltage_index))
+
+_gate_index(m::GatedNullModel) = 3 - m.voltage_index
+
+CytoZoo.num_states(::GatedNullModel) = 2
+CytoZoo.num_parameters(::GatedNullModel) = 0
+CytoZoo.transmembrane_potential_index(m::GatedNullModel) = m.voltage_index
+CytoZoo.default_initial_state(::GatedNullModel) = [0.0, 0.0]
+CytoZoo.state_names(m::GatedNullModel) = m.voltage_index == 1 ? (:v, :w) : (:w, :v)
+CytoZoo.parameter_names(::GatedNullModel) = ()
+function CytoZoo.state_index(m::GatedNullModel, name::Symbol)
+    return findfirst(==(name), CytoZoo.state_names(m))
+end
+CytoZoo.parameter_index(::GatedNullModel, ::Symbol) = nothing
+CytoZoo.has_rush_larsen(::GatedNullModel) = true
+
+function (m::GatedNullModel)(du, u, p, t)
+    du[m.voltage_index] = zero(eltype(du))
+    du[_gate_index(m)] = -m.rate * u[_gate_index(m)]
+    return nothing
+end
+
+function CytoZoo.rush_larsen_step!(u_new, u, p, t, dt, m::GatedNullModel)
+    u_new[m.voltage_index] = u[m.voltage_index]
+    u_new[_gate_index(m)] = u[_gate_index(m)] * exp(-m.rate * dt)
+    return nothing
+end
+
+"""
     discrete_decay_rate(κ_eff, grid) -> Real
 
 Decay rate of the lowest cosine mode under the *discrete* zero-flux Laplacian.
