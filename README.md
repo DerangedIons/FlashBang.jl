@@ -38,9 +38,7 @@ shapes, so a model description reads the same in either — while depending on n
 conductivity, zero-flux boundaries, arbitrary CytoZoo cell models, spatial parameter
 heterogeneity, CPU and CUDA.
 
-**Currently out:** unstructured meshes, bidomain, mechanics, spatially varying conductivity
-fields, non-zero-flux boundaries, Rush–Larsen inner solvers, adaptive mesh refinement,
-conduction-velocity and pseudo-ECG post-processing.
+**Currently out:** unstructured meshes, bidomain, mechanics, spatially varying conductivity fields, non-zero-flux boundaries, adaptive mesh refinement, conduction-velocity and pseudo-ECG post-processing.
 
 ## The pipeline
 
@@ -74,6 +72,18 @@ while integrator.t < 400.0
 end
 ```
 
+## Inner algorithms
+
+Any fixed-step OrdinaryDiffEq algorithm can advance either half (`Euler()` above). Two FlashBang algorithms use structure a black-box right-hand side hides, and together they lift both explicit step limits:
+
+```julia
+integrator = init(prob, LieTrotterGodunov((CrankNicolson(), RushLarsen())); dt = 0.05)
+(pde, ode) = algorithm_stats(integrator)   # elapsed ns, steps, CG iterations per half
+```
+
+- `RushLarsen()` (reaction) calls the cell model's own `CytoZoo.rush_larsen_step!` at every node — exponential integration of the gates, so their stiffness no longer caps `dt`. The model must report `CytoZoo.has_rush_larsen`; CytoZoo's `ToRORd` and gotranx `ode2cytozoo` output with a Rush–Larsen scheme do.
+- `CrankNicolson(; reltol = 1e-10, maxiter = 200)` (diffusion) solves `(I − Δt/2·P)φⁿ⁺¹ = (I + Δt/2·P)φⁿ + Δt·Iₛₜᵢₘ(tⁿ + Δt/2)/Cₘ` with matrix-free conjugate gradients, warm-started from `φⁿ`. Unconditionally stable, where explicit Euler needs `Δt ≤ 1/(2Σ_d D_d/h_d²)` — about 0.04 ms on the Niederer slab at 0.1 mm. The system is symmetric positive definite and well conditioned at cardiac step sizes, so no preconditioner is needed.
+
 ## Examples
 
 `julia --project=examples -t auto examples/<name>.jl`
@@ -102,9 +112,7 @@ State-blocked (structure of arrays), matching Thunderbolt's `StateBlockedLayout`
 u = \left[\varphi_\mathrm{m}(1{:}N);\; s_1(1{:}N);\; s_2(1{:}N);\; \ldots;\; s_{M-1}(1{:}N)\right]
 ```
 
-Every state is contiguous, so the diffusion half acts on the leading block `1:N` with no
-gather and no synchronizer object, and neighbouring GPU threads read neighbouring nodes.
-Reach into it by name rather than by index:
+Every state is contiguous, so the diffusion half acts on the voltage block with no gather and no synchronizer object, and neighbouring GPU threads read neighbouring nodes. The voltage is drawn first, but it is whichever block the cell model's `transmembrane_potential_index` names — gotranx-generated models order states by dependency and rarely put it first. (`:states` then has no single range and is rejected; address the other states by name.) Reach into it by name rather than by index:
 
 ```julia
 create_initial_condition(f)             # every node at the cell model's default state
@@ -126,9 +134,7 @@ grid = CartesianGrid(((0.0, 20.0),), (400,);
                      bc = ((Neumann(), Neumann()),), device = CUDABackend())
 ```
 
-The reaction half then runs as one KernelAbstractions kernel over the nodes. The cell model
-has to be isbits to ride into it — `CytoZoo.FHNModel` is; `ToRORd`, whose
-parameters live in a heap `Vector`, is not yet.
+The reaction half then runs as one KernelAbstractions kernel over the nodes. The cell model has to reach the kernel by value: either it is isbits (`CytoZoo.FHNModel` is), or it carries an `Adapt.adapt_structure` rule that turns its device arrays into device-side views — a model holding a `parameters` vector needs `Adapt.adapt_structure(to, m::M) = M(Adapt.adapt(to, m.parameters))` and its parameters on the device. `ToRORd`, whose parameters live in a heap `Vector` with no such rule, does not run there yet.
 
 ## Precision
 
