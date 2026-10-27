@@ -25,5 +25,6 @@ include("testutils.jl")
     include("test_pipeline.jl")
     include("test_diffusion.jl")
     include("test_cable.jl")
+    include("test_algorithms.jl")
     include("test_gpu.jl")
 end
