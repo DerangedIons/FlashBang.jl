@@ -32,18 +32,22 @@ function (f::DiffusionFunction)(du, u, p, t)
 end
 
 """
-    apply_stimulus!(du, stim, xs, Cₘ, t) -> du
+    apply_stimulus!(du, stim, xs, Cₘ, t, α = true) -> du
 
-Add `Iₛₜᵢₘ(x, t)/Cₘ` to the voltage derivative at every node. A
+Add `α·Iₛₜᵢₘ(x, t)/Cₘ` to the voltage derivative at every node. A
 [`NoStimulationProtocol`](@ref) dispatches to a no-op — the evaluation is removed, not
 multiplied by zero — and a protocol with declared `nonzero_intervals` skips the broadcast
 outside them.
-"""
-apply_stimulus!(du, ::NoStimulationProtocol, xs, Cₘ, t) = du
 
-function apply_stimulus!(du, stim::TransmembraneStimulationProtocol, xs, Cₘ, t)
+`α` scales the source for callers that integrate it over a step rather than evaluate a
+rate — [`CrankNicolson`](@ref) passes `Δt`. The default `true` is an exact multiplicative
+identity, so the right-hand side is bit-for-bit what it was without it.
+"""
+apply_stimulus!(du, ::NoStimulationProtocol, xs, Cₘ, t, α=true) = du
+
+function apply_stimulus!(du, stim::TransmembraneStimulationProtocol, xs, Cₘ, t, α=true)
     is_active(stim, t) || return du
-    du .+= stim.(xs, t) ./ Cₘ
+    du .+= α .* stim.(xs, t) ./ Cₘ
     return du
 end
 

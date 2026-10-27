@@ -70,6 +70,7 @@ using OrdinaryDiffEqOperatorSplitting:
     GenericSplitFunction, LieTrotterGodunov, OperatorSplittingProblem, StrangMarchuk
 
 using OrdinaryDiffEqCore: OrdinaryDiffEqCore
+using Krylov: Krylov
 
 using SciMLBase: SciMLBase, ODEFunction, init, solve!, step!
 
@@ -88,7 +89,7 @@ export AbstractStimulationProtocol, NoStimulationProtocol, TransmembraneStimulat
 export FiniteDifferenceDiscretization, semidiscretize, diffusion_operator, node_coordinates
 export create_initial_condition,
     getvariable, setvariable!, solution_size, num_nodes, variable_range
-export RushLarsen, AlgorithmStats, algorithm_stats
+export RushLarsen, CrankNicolson, AlgorithmStats, algorithm_stats
 export regrid
 
 # Re-exported mesh vocabulary, so `using FlashBang` is enough to build a problem.
