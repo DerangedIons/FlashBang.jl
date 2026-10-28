@@ -19,8 +19,8 @@ algorithm has taken. Reach it with [`algorithm_stats`](@ref).
 - `elapsed_ns::Int`: wall time inside `perform_step!`, bracketed by device synchronizations
   so asynchronous GPU work is charged to the step that queued it.
 - `steps::Int`: steps taken.
-- `iterations::Int`: inner linear-solver iterations (CG for [`CrankNicolson`](@ref)); `0`
-  for [`RushLarsen`](@ref).
+- `iterations::Int`: inner linear-solver iterations (CG or GMRES for
+  [`CrankNicolson`](@ref)); `0` for [`RushLarsen`](@ref).
 
 The record is mutable and live — the integrator keeps writing into it. The first step
 includes JIT compilation (for a large generated cell model, seconds of it), so a driver
@@ -253,16 +253,23 @@ with condition number `1 + Δt·λ_max(−P)/2` — a few units at cardiac `Δt`
 CG, warm-started from `φⁿ`, converges in tens of iterations without a preconditioner, and
 needs nothing but the prepared operator's `mul!`, so it runs unchanged on a GPU.
 
+On an adaptively refined `BlockForest` the coarse–fine interpolation makes `P` nonsymmetric,
+so CG no longer applies; the solve then switches to restarted GMRES on the same operator.
+The system is still a well-conditioned perturbation of the identity, so GMRES converges in a
+comparable handful of iterations. The choice is made when the integrator is built, from
+MatrixFreeOperators' `isselfadjoint` on the current forest, which is why an integrator must
+be rebuilt after [`regrid`](@ref).
+
 The stimulus is sampled once, at the step midpoint, which keeps the scheme second order
 for a smooth source (the same choice as fenicsx-beat). A pulse shorter than `Δt` can be
 missed entirely; resolve it with `Δt` or widen it.
 
 # Keyword Arguments
-- `reltol`: CG stops once `‖b − Aφ‖ ≤ reltol·‖b‖` — relative to the right-hand side, as
+- `reltol`: CG (or GMRES) stops once `‖b − Aφ‖ ≤ reltol·‖b‖` — relative to the right-hand side, as
   PETSc's default test, rather than to the initial residual: with a warm start the initial
   residual is already tiny wherever the tissue is at rest, and asking for a further factor
   of `reltol` there would chase round-off for `maxiter` iterations.
-- `maxiter`: CG iteration cap. A step that hits it without converging is failed (the
+- `maxiter`: Krylov iteration cap. A step that hits it without converging is failed (the
   splitting integrator stops with a non-success retcode), not silently accepted.
 
 Fixed-step only. Iteration counts are kept in [`algorithm_stats`](@ref).
@@ -346,7 +353,7 @@ function OrdinaryDiffEqCore.alg_cache(
         ),
     )
     rhs = similar(u)
-    workspace = Krylov.CgWorkspace(diffusion.prepared, rhs)
+    workspace = _krylov_workspace(diffusion, rhs)
     T = real(eltype(u))
     return CrankNicolsonCache(
         u, uprev, rhs, diffusion, workspace, T(alg.reltol), alg.maxiter, AlgorithmStats()
@@ -383,9 +390,27 @@ function _crank_nicolson!(u, uprev, cache::CrankNicolsonCache, t, dt)
 
     A = _CNOperator(diffusion.prepared, halfdt)
     atol = cache.reltol * LinearAlgebra.norm(rhs)
-    Krylov.cg!(workspace, A, rhs, uprev; atol, rtol=zero(atol), itmax=cache.maxiter)
+    _krylov_solve!(workspace, A, rhs, uprev; atol, rtol=zero(atol), itmax=cache.maxiter)
     copyto!(u, Krylov.solution(workspace))
 
     cache.stats.iterations += Krylov.iteration_count(workspace)
     return Krylov.issolved(workspace)
+end
+
+# GMRES keeps this many basis vectors before restarting. The CN system is close to the
+# identity, so a restart is rare; the memory is what the rare one costs.
+const _GMRES_MEMORY = 20
+
+# CG needs a symmetric operator, which a uniform grid gives and a refined forest does not.
+# Decided once per cache from the operator itself, so a stale choice cannot outlive the
+# forest it was made on: a regrid forces a new integrator, and with it a new cache.
+function _krylov_workspace(diffusion::DiffusionFunction, rhs)
+    isselfadjoint(diffusion.op) && return Krylov.CgWorkspace(diffusion.prepared, rhs)
+    return Krylov.GmresWorkspace(diffusion.prepared, rhs; memory=_GMRES_MEMORY)
+end
+
+_krylov_solve!(ws::Krylov.CgWorkspace, A, b, x₀; kwargs...) = Krylov.cg!(ws, A, b, x₀; kwargs...)
+
+function _krylov_solve!(ws::Krylov.GmresWorkspace, A, b, x₀; kwargs...)
+    return Krylov.gmres!(ws, A, b, x₀; restart=true, kwargs...)
 end

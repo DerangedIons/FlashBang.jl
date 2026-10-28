@@ -38,7 +38,7 @@ shapes, so a model description reads the same in either — while depending on n
 conductivity, zero-flux boundaries, arbitrary CytoZoo cell models, spatial parameter
 heterogeneity, CPU and CUDA.
 
-**Currently out:** unstructured meshes, bidomain, mechanics, spatially varying conductivity fields, non-zero-flux boundaries, adaptive mesh refinement, conduction-velocity and pseudo-ECG post-processing.
+**Currently out:** unstructured meshes, bidomain, mechanics, spatially varying conductivity fields, non-zero-flux boundaries, adaptive refinement on the GPU, conduction-velocity and pseudo-ECG post-processing.
 
 ## The pipeline
 

@@ -61,10 +61,15 @@ end
 
 """
     semidiscretize(split::ReactionDiffusionSplit, disc::FiniteDifferenceDiscretization,
-                   grid::CartesianGrid) -> GenericSplitFunction
+                   grid::Union{CartesianGrid,BlockForest}) -> GenericSplitFunction
 
 Turn a continuous [`ReactionDiffusionSplit`](@ref) into a right-hand side on `grid`,
 ready for `OperatorSplittingProblem`.
+
+`grid` is a uniform `CartesianGrid` or an adaptive `BlockForest`. On a forest the nodes are
+the interior cells of every leaf, in the forest's flat (Morton block) order, and the result
+describes the forest's *current* leaf set: after the forest changes, call [`regrid`](@ref),
+which re-semidiscretizes and carries the solution across.
 
 The result is a two-operator `GenericSplitFunction`:
 
@@ -99,13 +104,13 @@ See also: [`create_initial_condition`](@ref), [`solution_size`](@ref).
 function semidiscretize(
     split::ReactionDiffusionSplit{<:MonodomainModel},
     disc::FiniteDifferenceDiscretization,
-    grid::CartesianGrid{N},
+    grid::StructuredGrid{N},
 ) where {N}
     model = split.model
     _validate_zero_flux(grid)
     _validate_conductivity_dimension(model.κ, grid)
 
-    T = eltype(spacing(grid))
+    T = _spacing_eltype(grid)
     op = diffusion_operator(model, grid)
     prepared = prepare(op, scalar_field(grid, T))
 
@@ -132,7 +137,8 @@ function semidiscretize(
 end
 
 """
-    diffusion_operator(model::MonodomainModel, grid::CartesianGrid) -> AbstractOperator
+    diffusion_operator(model::MonodomainModel, grid::Union{CartesianGrid,BlockForest})
+        -> AbstractOperator
 
 The matrix-free operator `∇⋅(κ/(χCₘ))∇`, folded once at setup so the right-hand side
 carries no coefficient arithmetic.
@@ -148,15 +154,15 @@ Laplacian carries the isotropic part in one halo exchange and only the genuinely
 anisotropic axes pay for a correction term. Axes equal to `κ_min` contribute nothing and
 are dropped, so an isotropic tuple collapses back to the single-Laplacian form.
 """
-function diffusion_operator(model::MonodomainModel, grid::CartesianGrid)
+function diffusion_operator(model::MonodomainModel, grid::StructuredGrid)
     return _diffusion_operator(model.κ ./ (model.χ * model.Cₘ), grid)
 end
 
-_diffusion_operator(κ_eff::Number, grid::CartesianGrid) = κ_eff * laplacian(grid)
+_diffusion_operator(κ_eff::Number, grid::StructuredGrid) = κ_eff * laplacian(grid)
 
 # Built once per solve, so the type instability of accumulating an operator tree in a loop
 # is paid at setup and never in `mul!` — every downstream call sees a concrete `prepared`.
-function _diffusion_operator(κ_eff, grid::CartesianGrid{N}) where {N}
+function _diffusion_operator(κ_eff, grid::StructuredGrid{N}) where {N}
     κ_min = minimum(κ_eff)
     op = κ_min * laplacian(grid)
     for d in 1:N
@@ -169,10 +175,12 @@ end
 
 """
     node_coordinates(grid::CartesianGrid{N}) -> AbstractVector{SVector{N}}
+    node_coordinates(forest::BlockForest{N}) -> AbstractVector{SVector{N}}
     node_coordinates(f::GenericSplitFunction) -> AbstractVector{SVector{N}}
 
 Cell-center coordinates of every interior cell, flattened in the same order
-MatrixFreeOperators' `flatten` uses, on the grid's device. Given a semidiscretization it
+MatrixFreeOperators' `flatten` uses, on the grid's device. For a forest that is leaf by
+leaf in Morton order, each leaf's cells in column-major order. Given a semidiscretization it
 returns the very vector the right-hand sides use, so plotting `φₘ` against position needs
 no second construction.
 
@@ -190,8 +198,25 @@ function node_coordinates(grid::CartesianGrid{N,T}) where {N,T}
     return device
 end
 
-function _validate_zero_flux(grid::CartesianGrid{N}) where {N}
-    bcs = boundary_conditions(grid)
+# Host-side only: forests are regridded on the host, and FlashBang's forest path is CPU-only.
+function node_coordinates(forest::BlockForest{N,T}) where {N,T}
+    per_leaf = map(1:nleaves(forest)) do i
+        leaf = leaf_grid(forest, i)
+        return vec([cell_center(leaf, I) for I in interior(leaf)])
+    end
+    return reduce(vcat, per_leaf)
+end
+
+_spacing_eltype(grid::CartesianGrid) = eltype(spacing(grid))
+_spacing_eltype(::BlockForest{N,T}) where {N,T} = T
+
+# MatrixFreeOperators has no `boundary_conditions` method for a forest; the physical faces
+# are the base grid's, stored on the forest.
+_boundary_conditions(grid::CartesianGrid) = boundary_conditions(grid)
+_boundary_conditions(forest::BlockForest) = forest.bc
+
+function _validate_zero_flux(grid::StructuredGrid{N}) where {N}
+    bcs = _boundary_conditions(grid)
     for d in 1:N, (side, bc) in zip(("low", "high"), bcs[d])
         if !(bc isa Neumann) || !iszero(bc.flux)
             throw(
@@ -206,9 +231,9 @@ function _validate_zero_flux(grid::CartesianGrid{N}) where {N}
     return nothing
 end
 
-_validate_conductivity_dimension(::Number, ::CartesianGrid) = nothing
+_validate_conductivity_dimension(::Number, ::StructuredGrid) = nothing
 
-function _validate_conductivity_dimension(κ, grid::CartesianGrid{N}) where {N}
+function _validate_conductivity_dimension(κ, grid::StructuredGrid{N}) where {N}
     length(κ) == N || throw(
         ArgumentError(
             "per-axis conductivity has $(length(κ)) entries but the grid is " *
