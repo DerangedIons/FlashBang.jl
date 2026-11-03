@@ -14,7 +14,7 @@ const AMR_DT = 0.05
 const AMR_THRESHOLD = 0.5                     # FHN φₘ runs over roughly [0, 1]
 const AMR_PROBES = ((5.0, 2.0), (10.0, 2.0), (15.0, 2.0), (19.9, 3.9))
 const AMR_BC = ((Neumann(), Neumann()), (Neumann(), Neumann()))
-const AMR_ALG = LieTrotterGodunov((Euler(), Euler()))   # explicit limit h²/4κ ≈ 0.16 > AMR_DT
+const AMR_ALG = LieTrotterGodunov((CrankNicolson(), Euler()))
 const AMR_REGRID_EVERY = 10                   # steps
 
 function amr_split()
@@ -102,7 +102,7 @@ end
         # 1 ms at this speed); interpolation alone stays well inside one step's worth.
         @test Δ ≤ 0.2
         @test adaptive.regrids > 0
-        @test adaptive.nonsymmetric               # mixed levels occurred
+        @test adaptive.nonsymmetric               # mixed levels occurred, so GMRES ran
         @test adaptive.mean_cells < 0.8 * uniform.mean_cells
     end
 end
