@@ -48,6 +48,7 @@ using MatrixFreeOperators:
     dimension,
     flat_to_interior!,
     interior,
+    isselfadjoint,
     laplacian,
     local_size,
     prepare,
