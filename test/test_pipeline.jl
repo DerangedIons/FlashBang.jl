@@ -297,3 +297,63 @@ end
     )
     @test MatrixFreeOperators.flatten(field) ≈ [x[1] + 10 * x[2] for x in xs]
 end
+
+@testset "Pipeline — solve ≡ step! loop; states by name on the solution" begin
+    # `solve` is the primary API, so it has to give exactly what the hand-driven
+    # Thunderbolt-style loop gives, and its result has to index by state name. `dt` is
+    # binary-exact so `t` accumulates without rounding drift; with drift, `solve` takes one
+    # extra sliver step to land on `tf` and the two diverge in the last bits.
+    stim = TransmembraneStimulationProtocol(
+        (x, t) -> (t <= 2.0 && x[1] <= 1.0) ? 0.5 : 0.0; nonzero_intervals=((0.0, 2.0),)
+    )
+    f = fhn_pipeline(; stim)
+    n = num_nodes(f)
+    tend, dt = 20.0, 1 / 128
+    nsteps = round(Int, tend / dt)
+    prob = OperatorSplittingProblem(f, create_initial_condition(f), (0.0, tend))
+    alg = LieTrotterGodunov((Euler(), Euler()))
+
+    # First threshold crossing per node, through the observer and through the loop.
+    first_crossing!(activation, φ, t) = foreach(eachindex(activation)) do i
+        isnan(activation[i]) && φ[i] > 0.5 && (activation[i] = t)
+    end
+    act_observer = fill(NaN, n)
+    observer = StateObserver() do u, t
+        first_crossing!(act_observer, getvariable(u, f, :φₘ), t)
+    end
+    sol = solve(prob, alg; dt, saveat=1.0, callback=observer)
+
+    integ = init(prob, alg; dt)
+    act_loop = fill(NaN, n)
+    for _ in 1:nsteps
+        step!(integ, dt, true)
+        first_crossing!(act_loop, getvariable(integ.u, f, :φₘ), integ.t)
+    end
+
+    @info "solve vs step! loop" sol.retcode sol.t integ.t max_diff = maximum(
+        abs, sol.u[end] .- integ.u
+    ) nodes_activated = count(!isnan, act_observer) φ_extrema = extrema(sol[:φₘ, end])
+
+    @test sol.retcode == FlashBang.SciMLBase.ReturnCode.Success
+    # Only the `saveat` points: an observer that left the default `save_positions` on
+    # would add two full-state saves per step here.
+    @test sol.t == 0.0:1.0:tend
+    @test sol.u[end] == integ.u
+    @test count(!isnan, act_observer) > 1            # the wave actually propagated
+    @test isequal(act_observer, act_loop)
+
+    # Named reads, block by block. `:s` is FHN's second state; `:v` is FHN's own voltage
+    # name, aliased by the model's `:φₘ`.
+    @test sol[:φₘ, end] == getvariable(integ.u, f, :φₘ)
+    @test sol[:s, end] == integ.u[(n + 1):(2n)]
+    @test sol[:v] == sol[:φₘ]
+    @test length(sol[:φₘ]) == length(sol.t)
+    @test FlashBang.SII.variable_symbols(sol) == [:φₘ, :s]
+    @test sol(2.5; idxs=:φₘ) ≈ sol(2.5)[1:n]
+    @test prob[:φₘ] == sol[:φₘ, 1]
+    @test integ[:φₘ] == getvariable(integ.u, f, :φₘ)
+
+    views = getvariable(sol, f, :φₘ)
+    @test views[end] isa SubArray
+    @test views[end] == sol[:φₘ, end]
+end

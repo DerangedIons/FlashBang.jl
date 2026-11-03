@@ -77,8 +77,13 @@ end
 
 """
     getvariable(u, f::GenericSplitFunction, name::Symbol) -> SubArray
+    getvariable(sol, f::GenericSplitFunction, name::Symbol) -> Vector{<:SubArray}
 
-View of one named block of the solution vector.
+View of one named block of the solution vector `u` (an `integrator.u`, a `sol.u[k]`, or an
+initial condition), or of that block at every saved time of a solution `sol`.
+
+This is the zero-copy counterpart of symbolic indexing: `sol[:φₘ]` and `sol[:φₘ, end]`
+return the same values as copies, `getvariable` returns views.
 
 `name` is a cell-model state name, the model's `φ_symbol` (`:φₘ` by default, aliasing
 whichever state the cell model reports as the transmembrane potential), or its
@@ -95,6 +100,15 @@ w = getvariable(u, f, :CaMKt)   # length N, one named state
 ```
 """
 getvariable(u, f::GenericSplitFunction, name::Symbol) = view(u, variable_range(f, name))
+
+# A solution is itself a 2-D `AbstractArray`, so the method above would try to `view` it
+# with one index and fail; this one goes through the saved states instead.
+function getvariable(
+    sol::SciMLBase.AbstractTimeseriesSolution, f::GenericSplitFunction, name::Symbol
+)
+    r = variable_range(f, name)
+    return map(u -> view(u, r), sol.u)
+end
 
 """
     setvariable!(fun, u, f::GenericSplitFunction, name::Symbol) -> u
@@ -136,12 +150,13 @@ end
 """
     variable_range(f::GenericSplitFunction, name::Symbol) -> UnitRange{Int}
 
-Index range of a named block in the solution vector — the raw form of
-[`getvariable`](@ref), useful for building views of an integrator's `u` without holding
-one.
+Index range of a named block in a state vector (`integrator.u`, `sol.u[k]`) — the raw form
+of [`getvariable`](@ref), useful for building views without holding one.
 """
-function variable_range(f::GenericSplitFunction, name::Symbol)
-    reaction = _reaction_function(f)
+variable_range(f::GenericSplitFunction, name::Symbol) =
+    _variable_range(_reaction_function(f), name)
+
+function _variable_range(reaction::PointwiseODEFunction, name::Symbol)
     N, M = reaction.nnodes, reaction.nstates
     name === reaction.state_symbol && return (N + 1):(N * M)
     return _state_block(_state_position(reaction, name), N)
@@ -164,3 +179,67 @@ function _state_position(reaction::PointwiseODEFunction, name::Symbol)
     )
     return k
 end
+
+# --------------------------------------------------------------------------------
+# Symbolic indexing: `sol[:φₘ]`, `sol(t; idxs = :φₘ)`, `prob[:φₘ]`, `integrator[:φₘ]`.
+#
+# SciML resolves a symbol along sol → sol.prob → prob.f → `symbolic_container(prob.f)`.
+# `GenericSplitFunction` has no `sys` field, so without this hook the chain ends at an
+# empty symbol cache and every named lookup fails with "Invalid symbol". The method below
+# is restricted to the split function `semidiscretize` builds — its operator tuple holds
+# FlashBang's own `DiffusionFunction` and `PointwiseODEFunction` — so it never fires on
+# another package's split function. A bare `::GenericSplitFunction` method would be piracy.
+#
+# Each name maps to a *block* of the state-blocked vector, so `variable_index` returns a
+# `UnitRange` rather than a scalar index. SII's state getter is a plain `getindex`, which
+# turns that into one length-N vector per saved time. If a release of SII narrows scalar
+# indices to `Int`, the named-indexing testset in test/test_pipeline.jl fails loudly.
+
+const MonodomainSplitFunction = GenericSplitFunction{
+    <:Tuple{
+        ODEFunction{true,<:Any,<:DiffusionFunction},
+        ODEFunction{true,<:Any,<:PointwiseODEFunction},
+    },
+}
+
+# The index provider. Built from the reaction functor alone, which carries every name.
+struct StateBlockSymbols{R<:PointwiseODEFunction}
+    reaction::R
+end
+
+SII.symbolic_container(f::MonodomainSplitFunction) =
+    StateBlockSymbols(_reaction_function(f))
+
+# Non-throwing membership test: `is_variable` must answer `false`, not error, for unknown
+# names, so SII can fall through to the independent variable and give a clean error.
+function _has_block(reaction::PointwiseODEFunction, sym)
+    sym isa Symbol || return false
+    return sym === reaction.φ_symbol ||
+           sym === reaction.state_symbol ||
+           sym ∈ CytoZoo.state_names(reaction.ion)
+end
+
+# One name per disjoint block: the cell model's state names with the voltage entry renamed
+# to `φ_symbol`. The aliases — the cell model's own voltage name and `state_symbol` — are
+# accepted by `is_variable` but not listed, so voltage is never counted twice.
+function _canonical_names(reaction::PointwiseODEFunction)
+    names = collect(Symbol, CytoZoo.state_names(reaction.ion))
+    names[CytoZoo.transmembrane_potential_index(reaction.ion)] = reaction.φ_symbol
+    return names
+end
+
+SII.is_variable(s::StateBlockSymbols, sym) = _has_block(s.reaction, sym)
+SII.variable_index(s::StateBlockSymbols, sym) =
+    _has_block(s.reaction, sym) ? _variable_range(s.reaction, sym) : nothing
+SII.variable_symbols(s::StateBlockSymbols) = _canonical_names(s.reaction)
+SII.all_variable_symbols(s::StateBlockSymbols) = SII.variable_symbols(s)
+SII.all_symbols(s::StateBlockSymbols) = vcat(SII.variable_symbols(s), :t)
+# Without `is_parameter`, `sol[:φₘ]` throws a `MethodError` rather than resolving.
+SII.is_parameter(::StateBlockSymbols, sym) = false
+SII.parameter_symbols(::StateBlockSymbols) = Symbol[]
+SII.is_independent_variable(::StateBlockSymbols, sym) = sym === :t
+SII.independent_variable_symbols(::StateBlockSymbols) = [:t]
+SII.is_observed(::StateBlockSymbols, sym) = false
+SII.is_time_dependent(::StateBlockSymbols) = true
+SII.constant_structure(::StateBlockSymbols) = true
+SII.default_values(::StateBlockSymbols) = Dict{Symbol,Any}()

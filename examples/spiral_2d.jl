@@ -31,6 +31,7 @@ Pkg.activate(@__DIR__)
 
 using FlashBang
 using OrdinaryDiffEqLowOrderRK: Euler
+using SciMLBase: CallbackSet
 using CairoMakie, Printf, Statistics
 
 include(joinpath(@__DIR__, "aliev_panfilov.jl"))
@@ -86,39 +87,43 @@ end
 Run the S1–S2 protocol to `TEND`, collecting a `V` field at each of `SNAP_TIMES` and a
 `mean(V)` trace throughout. `on_frame(V, t)` is called every `frame_every` steps when
 given, so the animation reuses this exact solver rather than a parallel copy of it.
+
+The snapshots are `saveat` points. They are multiples of `DT`, so each is interpolated
+across a step that ends within rounding of it. Passing them as `tstops` too would add
+near-zero steps that knock the step-counted observer off its time grid. The trace and the frames are
+needed far more often than a 65 536-node state should be saved, so they are observed in
+flight instead.
 """
 function simulate(f; on_frame=nothing, frame_every=120)
-    integrator = init(
+    meanV, sample_t = Float64[], Float64[]
+    trace = StateObserver(; every=SAMPLE_EVERY) do u, t
+        push!(meanV, mean(getvariable(u, f, :φₘ)))
+        push!(sample_t, t)
+    end
+    callback = if on_frame === nothing
+        trace
+    else
+        frames = StateObserver(; every=frame_every) do u, t
+            on_frame(reshape(collect(getvariable(u, f, :φₘ)), N, N), t)
+        end
+        CallbackSet(trace, frames)
+    end
+
+    sol = solve(
         OperatorSplittingProblem(f, create_initial_condition(f), (0.0, TEND)),
         LieTrotterGodunov((Euler(), Euler()));
         dt=DT,
+        saveat=SNAP_TIMES,
+        save_start=false,
+        save_end=false,
+        callback,
     )
 
-    snaps = NamedTuple[]
-    meanV, sample_t = Float64[], Float64[]
-    nstep, next_snap = 0, 1
-
-    while integrator.t < TEND - DT / 2
-        step!(integrator, DT, true)
-        nstep += 1
-        φ = getvariable(integrator.u, f, :φₘ)
-
-        if nstep % SAMPLE_EVERY == 0
-            push!(meanV, mean(φ))
-            push!(sample_t, integrator.t)
-        end
-
-        if next_snap <= length(SNAP_TIMES) && integrator.t >= SNAP_TIMES[next_snap]
-            push!(snaps, (t=integrator.t, V=reshape(collect(φ), N, N)))
-            lo, hi = extrema(φ)
-            pct = 100 * count(>(0.5), φ) / length(φ)
-            @printf "  t = %6.1f   V ∈ [%6.3f, %5.3f]   depolarized %5.1f%% of the sheet\n" integrator.t lo hi pct
-            next_snap += 1
-        end
-
-        on_frame !== nothing &&
-            nstep % frame_every == 0 &&
-            on_frame(reshape(collect(φ), N, N), integrator.t)
+    snaps = map(sol.t, sol[:φₘ]) do t, φ
+        lo, hi = extrema(φ)
+        pct = 100 * count(>(0.5), φ) / length(φ)
+        @printf "  t = %6.1f   V ∈ [%6.3f, %5.3f]   depolarized %5.1f%% of the sheet\n" t lo hi pct
+        (t=t, V=reshape(φ, N, N))
     end
 
     return (; snaps, meanV, sample_t)

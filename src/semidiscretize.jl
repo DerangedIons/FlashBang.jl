@@ -80,12 +80,15 @@ raises an `ArgumentError` naming the offending face.
 
 ```julia
 using CytoZoo: FHNModel
+using OrdinaryDiffEqLowOrderRK: Euler
 
 grid = CartesianGrid(((0.0, 20.0),), (200,); bc = ((Neumann(), Neumann()),))
 model = MonodomainModel(; κ = 1.0e-3, ion = FHNModel())
 f = semidiscretize(ReactionDiffusionSplit(model), FiniteDifferenceDiscretization(), grid)
 u₀ = create_initial_condition(f)
 prob = OperatorSplittingProblem(f, u₀, (0.0, 100.0))
+sol = solve(prob, LieTrotterGodunov((Euler(), Euler())); dt = 0.01, saveat = 1.0)
+sol[:φₘ, end]
 ```
 
 See also: [`create_initial_condition`](@ref), [`solution_size`](@ref).

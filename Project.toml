@@ -12,6 +12,11 @@ MatrixFreeOperators = "bf251007-91fc-422b-8727-f8d5215c1c76"
 OrdinaryDiffEqOperatorSplitting = "760fc936-9fa0-4281-9c1a-468957eedc89"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+SymbolicIndexingInterface = "2efcf032-c050-4f8e-a9bb-153293bab1f5"
+
+[sources]
+CytoZoo = {rev = "main", url = "https://github.com/DerangedIons/CytoZoo.jl"}
+MatrixFreeOperators = {rev = "main", url = "https://github.com/RallypointOne/MatrixFreeOperators.jl"}
 
 [compat]
 Adapt = "4"
@@ -25,6 +30,7 @@ OrdinaryDiffEqLowOrderRK = "1.7, 2"
 OrdinaryDiffEqOperatorSplitting = "0.4"
 SciMLBase = "2.77, 3"
 StaticArrays = "1"
+SymbolicIndexingInterface = "0.3.36"
 Test = "1"
 julia = "1.10"
 

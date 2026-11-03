@@ -21,6 +21,7 @@ Pkg.activate(@__DIR__)
 
 using FlashBang
 using OrdinaryDiffEqLowOrderRK: Euler
+using SciMLBase: CallbackSet
 using CairoMakie, Printf
 
 include(joinpath(@__DIR__, "ten_tusscher_2006.jl"))
@@ -88,47 +89,53 @@ end
 #--------------------------------------------------------------------------------# Solve
 
 """
-Step the split integrator to `TEND`, maintaining a full-field first-activation-time buffer
-(NaN until a cell first crosses `V_ACTIVATION`), and call
-`on_frame(V::Array{3}, act::Array{3}, t)` every `frame_every` steps with the potential and
-the activation buffer reshaped to the grid. The NaNs are the masking: Makie's `contour!`
-draws nothing through NaN cells, so not-yet-activated tissue stays contour-free.
+Solve to `TEND`, maintaining a full-field first-activation-time buffer (NaN until a cell
+first crosses `V_ACTIVATION`), and call `on_frame(V::Array{3}, act::Array{3}, t)` every
+`frame_every` steps with the potential and the activation buffer reshaped to the grid. The
+NaNs are the masking: Makie's `contour!` draws nothing through NaN cells, so
+not-yet-activated tissue stays contour-free.
+
+Nothing is saved — at 0.1 mm the frames alone would be ~8 GB as full states — so both the
+activation buffer and the frames are observed in flight. The activation observer comes
+first in the `CallbackSet`, so every frame sees the buffer as of its own step.
 """
 function simulate(grid, f; on_frame=nothing, frame_every=FRAME_EVERY)
+    activation = fill(NaN, prod(NCELLS))
+    record = StateObserver(; every=SAMPLE_EVERY) do u, t
+        φ = getvariable(u, f, :φₘ)
+        @inbounds for i in eachindex(activation)
+            isnan(activation[i]) && φ[i] > V_ACTIVATION && (activation[i] = t)
+        end
+    end
+
+    nframes = Ref(0)
+    callback = if on_frame === nothing
+        record
+    else
+        frames = StateObserver(; every=frame_every) do u, t
+            φ = collect(getvariable(u, f, :φₘ))
+            on_frame(reshape(φ, NCELLS...), reshape(copy(activation), NCELLS...), t)
+            nframes[] += 1
+        end
+        CallbackSet(record, frames)
+    end
+
+    # `init` + `solve!` only to read the step count: OrdinaryDiffEqOperatorSplitting 0.4
+    # leaves `sol.stats` at zero, while `integrator.stats` counts accepted steps.
+    tstart = time_ns()
     integrator = init(
         OperatorSplittingProblem(f, create_initial_condition(f), (0.0, TEND)),
         LieTrotterGodunov((Euler(), Euler()));
         dt=DT,
+        save_start=false,
+        save_end=false,
+        callback,
     )
-
-    activation = fill(NaN, prod(NCELLS))
-    nstep, nframes = 0, 0
-    tstart = time_ns()
-
-    while integrator.t < TEND - DT / 2
-        step!(integrator, DT, true)
-        nstep += 1
-
-        if nstep % SAMPLE_EVERY == 0
-            φ = getvariable(integrator.u, f, :φₘ)
-            @inbounds for i in eachindex(activation)
-                isnan(activation[i]) &&
-                    φ[i] > V_ACTIVATION &&
-                    (activation[i] = integrator.t)
-            end
-        end
-
-        if on_frame !== nothing && nstep % frame_every == 0
-            φ = collect(getvariable(integrator.u, f, :φₘ))
-            on_frame(
-                reshape(φ, NCELLS...), reshape(copy(activation), NCELLS...), integrator.t
-            )
-            nframes += 1
-        end
-    end
-
+    solve!(integrator)
     wall = (time_ns() - tstart) * 1.0e-9
-    @printf "  %d steps, %d frames in %.1f s (%.2f ms/step)\n" nstep nframes wall (
+
+    nstep = integrator.stats.naccept
+    @printf "  %d steps, %d frames in %.1f s (%.2f ms/step)\n" nstep nframes[] wall (
         1.0e3 * wall / nstep
     )
     return wall

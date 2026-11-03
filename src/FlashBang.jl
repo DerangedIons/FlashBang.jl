@@ -3,14 +3,16 @@
 
 Cardiac tissue electrophysiology on orthogonal, structured grids.
 
-The pipeline mirrors Thunderbolt's by convention — same names, same shapes, no dependency:
+Building a problem uses Thunderbolt's names and shapes (with no dependency on it); solving
+it is an ordinary SciML `solve`:
 
 ```julia
 model = MonodomainModel(; κ, ion)                       # continuous problem
 split = ReactionDiffusionSplit(model)                   # how to split it
 f     = semidiscretize(split, FiniteDifferenceDiscretization(), grid)
 prob  = OperatorSplittingProblem(f, create_initial_condition(f), tspan)
-integrator = init(prob, LieTrotterGodunov((Euler(), Euler())); dt)
+sol   = solve(prob, LieTrotterGodunov((Euler(), Euler())); dt, saveat)
+sol[:φₘ, end]                                           # states by name
 ```
 
 Spatial operators come from MatrixFreeOperators.jl and cell kinetics from CytoZoo.jl.
@@ -32,7 +34,8 @@ using KernelAbstractions: @index, @kernel
 using CytoZoo: CytoZoo
 
 # Explicit imports throughout: MatrixFreeOperators exports `solve` and `gradient`, which
-# would clash with the SciML stack and with Base.
+# would clash with the SciML stack and with Base. The `solve` FlashBang exports is
+# SciMLBase's, so a user who writes `using FlashBang, MatrixFreeOperators` must qualify it.
 using MatrixFreeOperators:
     CartesianGrid,
     Dirichlet,
@@ -52,7 +55,8 @@ using MatrixFreeOperators:
 using OrdinaryDiffEqOperatorSplitting:
     GenericSplitFunction, LieTrotterGodunov, OperatorSplittingProblem, StrangMarchuk
 
-using SciMLBase: ODEFunction, init, solve!, step!
+using SciMLBase: SciMLBase, DiscreteCallback, ODEFunction, init, solve, solve!, step!
+using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 
 include("stimulus.jl")
 include("models.jl")
@@ -60,6 +64,7 @@ include("discretization.jl")
 include("reaction.jl")
 include("semidiscretize.jl")
 include("solution.jl")
+include("observer.jl")
 
 # FlashBang's own vocabulary
 export AbstractEPModel, MonodomainModel, ReactionDiffusionSplit
@@ -72,11 +77,12 @@ export create_initial_condition,
 export CartesianGrid, Dirichlet, Neumann, Periodic
 export boundary_conditions, cell_center, dimension, interior, local_size, spacing
 
-# Re-exported splitting vocabulary, for the same reason. `init`/`step!`/`solve!` but
-# deliberately not `solve`: the operator-splitting integrator does not implement the SciML
-# solution interface, so there is no `sol` object to hand back. Sample it over time with
-# `SciMLIterators.TimeChoiceIterator(integrator, ts)` instead.
+# Re-exported splitting vocabulary, for the same reason. `solve` is the main entry point:
+# it returns an `ODESolution` that indexes by state name (`sol[:φₘ]`) through the
+# symbolic-indexing hook in `solution.jl`. `init`/`step!`/`solve!` drive the integrator by
+# hand, the Thunderbolt-style path.
 export GenericSplitFunction, OperatorSplittingProblem, LieTrotterGodunov, StrangMarchuk
-export init, solve!, step!
+export init, solve, solve!, step!
+export StateObserver
 
 end # module
