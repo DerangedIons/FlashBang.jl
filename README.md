@@ -39,7 +39,7 @@ conductivity, zero-flux boundaries, arbitrary CytoZoo cell models, spatial param
 heterogeneity, CPU and CUDA.
 
 **Currently out:** unstructured meshes, bidomain, mechanics, spatially varying conductivity
-fields, non-zero-flux boundaries, Rush–Larsen inner solvers, adaptive mesh refinement,
+fields, non-zero-flux boundaries, Rush–Larsen inner solvers, adaptive refinement on the GPU,
 conduction-velocity and pseudo-ECG post-processing.
 
 ## The pipeline

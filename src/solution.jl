@@ -2,7 +2,9 @@
 #
 #     u = [φₘ(1:N); s₁(1:N); … ; s_{M-1}(1:N)]
 #
-# so every state is a contiguous block and `getvariable` is a view, never a gather.
+# so every state is a contiguous block and `getvariable` is a view, never a gather. The
+# voltage is drawn first, but it is block `CytoZoo.transmembrane_potential_index(ion)`
+# wherever that is; everything below goes through `_state_position` rather than assuming 1.
 
 # The split function's two operators, in the order `semidiscretize` builds them. Reaching
 # through `ODEFunction`'s `.f` is the price of returning a plain `GenericSplitFunction`
@@ -82,7 +84,9 @@ View of one named block of the solution vector.
 
 `name` is a cell-model state name, the model's `φ_symbol` (`:φₘ` by default, aliasing
 whichever state the cell model reports as the transmembrane potential), or its
-`state_symbol` (`:states` by default) for the whole non-voltage block.
+`state_symbol` (`:states` by default) for the whole non-voltage block. The last is only
+contiguous — and therefore only available — when the voltage is the first state; see
+[`variable_range`](@ref).
 
 Being a view, writing through it writes the solution.
 
@@ -139,11 +143,26 @@ end
 Index range of a named block in the solution vector — the raw form of
 [`getvariable`](@ref), useful for building views of an integrator's `u` without holding
 one.
+
+The whole non-voltage block (`state_symbol`, `:states` by default) is `(N+1):(N*M)` when
+the voltage is the first state. When the cell model reports another
+`transmembrane_potential_index` the non-voltage states straddle the voltage block, so there
+is no single range to return and an `ArgumentError` is thrown; address the states by name
+instead.
 """
 function variable_range(f::GenericSplitFunction, name::Symbol)
     reaction = _reaction_function(f)
     N, M = reaction.nnodes, reaction.nstates
-    name === reaction.state_symbol && return (N + 1):(N * M)
+    if name === reaction.state_symbol
+        k = CytoZoo.transmembrane_potential_index(reaction.ion)
+        k == 1 || throw(
+            ArgumentError(
+                ":$name is not a contiguous range: the voltage is state $k of $M, so the " *
+                "non-voltage states sit on both sides of it; address them by name",
+            ),
+        )
+        return (N + 1):(N * M)
+    end
     return _state_block(_state_position(reaction, name), N)
 end
 
