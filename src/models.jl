@@ -31,8 +31,8 @@ for transmembrane potential `φₘ` and cell-model states `s`.
 - `stim`: an [`AbstractStimulationProtocol`](@ref). Applied in the diffusion half, as a
   source term, uniformly in every dimension.
 - `φ_symbol`, `state_symbol`: names the solution helpers ([`getvariable`](@ref),
-  [`setvariable!`](@ref)) accept for the voltage block and for the whole non-voltage state
-  block. `state_symbol` is deliberately plural: a cell model may itself name a state `:s`
+  [`setvariable!`](@ref)) and symbolic indexing (`sol[name]`, `integrator[name]`) accept
+  for the voltage block and for the whole non-voltage state block. `state_symbol` is deliberately plural: a cell model may itself name a state `:s`
   (CytoZoo's `FHNModel` does), and a singular default would shadow it.
 
 The constructor is **keyword-only on purpose.** Thunderbolt's tutorial calls

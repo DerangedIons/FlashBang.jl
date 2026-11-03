@@ -31,8 +31,10 @@ factorization, no mesh data structure — and it is why the same source runs on 
 second implementation. Unstructured meshes, curved geometry, and finite elements are
 [Thunderbolt.jl](https://github.com/JuliaHealth/Thunderbolt.jl)'s job, not this package's.
 
-The pipeline is nevertheless *congruent* with Thunderbolt's by convention — same names, same
-shapes, so a model description reads the same in either — while depending on none of it.
+Building a problem nevertheless uses Thunderbolt's names and shapes, so a model description
+reads the same in either, while depending on none of it. Solving it is an ordinary SciML
+`solve`. Driving the integrator by hand, the way Thunderbolt's tutorials do, is covered on
+the docs' Thunderbolt compatibility page.
 
 **Currently in:** monodomain, N-dimensional, isotropic or axis-aligned anisotropic
 conductivity, zero-flux boundaries, arbitrary CytoZoo cell models, spatial parameter
@@ -64,14 +66,30 @@ stim = TransmembraneStimulationProtocol(
 model = MonodomainModel(; κ = 0.1, ion = FHNModel(), stim)
 f = semidiscretize(ReactionDiffusionSplit(model), FiniteDifferenceDiscretization(), grid)
 
-# 4. Solve. Diffusion and reaction each get their own inner algorithm.
+# 4. Solve. Diffusion and reaction each get their own inner algorithm. The split is
+#    fixed-step, so `dt` is required; `saveat` says which states to keep.
 prob = OperatorSplittingProblem(f, create_initial_condition(f), (0.0, 400.0))
-integrator = init(prob, LieTrotterGodunov((Euler(), Euler())); dt = 0.005)
+sol = solve(prob, LieTrotterGodunov((Euler(), Euler())); dt = 0.005, saveat = 1.0)
 
-while integrator.t < 400.0
-    step!(integrator, 0.005, true)
-    φ = getvariable(integrator.u, f, :φₘ)     # a view, not a copy
+# 5. Read states by name, as with any SciML solution.
+sol[:φₘ, end]              # voltage along the cable at t = 400
+sol[:φₘ]                   # ... at every saved time: a vector of length-400 vectors
+sol(250.5; idxs = :φₘ)     # between saves, linearly interpolated
+```
+
+**Saving.** Without `saveat`, only the first and last states are kept. Each save is a full
+copy of every state at every node, and `save_idxs` does not shrink it. Record per-step
+quantities, such as activation times or traces, with a `StateObserver` callback instead:
+
+```julia
+activation = fill(NaN, num_nodes(f))
+record = StateObserver() do u, t                # after every step; `every = n` to thin
+    φ = getvariable(u, f, :φₘ)
+    for i in eachindex(activation)
+        isnan(activation[i]) && φ[i] > 0.5 && (activation[i] = t)
+    end
 end
+sol = solve(prob, LieTrotterGodunov((Euler(), Euler())); dt = 0.005, callback = record)
 ```
 
 ## Examples
@@ -80,9 +98,10 @@ end
 
 | | |
 |---|---|
-| `cable_1d.jl` | the snippet above with reporting and a figure — one FitzHugh–Nagumo cable, one propagating action potential |
+| `cable_1d.jl` | the snippets above with reporting and a figure — one FitzHugh–Nagumo cable, one propagating action potential |
 | `spiral_2d.jl` | a reentrant spiral from an S1–S2 cross-field protocol, Aliev–Panfilov kinetics on an 80×80 sheet |
 | `niederer_benchmark.jl` | the Niederer et al. (2011) N-version benchmark: a 3D anisotropic slab with ten Tusscher–Panfilov 2006 kinetics, activation times at nine reference points compared against an independent finite-difference solve |
+| `niederer_animation.jl` | the same slab as a video with accumulating isochrones; nothing is saved, every frame is observed in flight |
 
 The last two are ports of the corresponding MatrixFreeOperators.jl examples, which run the
 same physics on an adaptive block forest through a hand-rolled Godunov split. Reading a pair
@@ -104,10 +123,19 @@ u = \left[\varphi_\mathrm{m}(1{:}N);\; s_1(1{:}N);\; s_2(1{:}N);\; \ldots;\; s_{
 
 Every state is contiguous, so the diffusion half acts on the leading block `1:N` with no
 gather and no synchronizer object, and neighbouring GPU threads read neighbouring nodes.
-Reach into it by name rather than by index:
+Reach into it by name rather than by index. On a solution, each name stands for a whole
+block:
 
 ```julia
-create_initial_condition(f)             # every node at the cell model's default state
+sol[:φₘ, end]                           # copy of the voltage block at the last save
+sol[:states, end]                       # every non-voltage state
+getvariable(sol, f, :φₘ)                # views instead of copies, one per saved time
+```
+
+On a raw state vector (an initial condition, `integrator.u`, `sol.u[k]`):
+
+```julia
+u = create_initial_condition(f)         # every node at the cell model's default state
 getvariable(u, f, :φₘ)                  # view of the voltage block
 getvariable(u, f, :states)              # view of every non-voltage state
 setvariable!(u, f, :φₘ) do x            # impose a profile

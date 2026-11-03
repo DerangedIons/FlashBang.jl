@@ -167,49 +167,57 @@ end
 
 #--------------------------------------------------------------------------------# Solve
 
-function simulate(grid, f)
-    integrator = init(
-        OperatorSplittingProblem(f, create_initial_condition(f), (0.0, TEND)),
-        LieTrotterGodunov((Euler(), Euler()));
-        dt=DT,
-    )
+"""
+Solve to `TEND`, recording activation at the probe points every `SAMPLE_EVERY` steps and a
+φₘ field at each of `SNAP_TIMES`.
 
+The snapshots are `saveat` points. They are multiples of `DT`, so each is interpolated
+across a step that ends within rounding of it. Passing them as `tstops` too would add
+near-zero steps that knock the step-counted observer off its time grid. At 0.1 mm a full
+state is 64 MB, so activation — needed every 0.1 ms — is observed in flight rather than
+saved.
+
+`init` + `solve!` rather than `solve`, only to read the step count off the integrator:
+OrdinaryDiffEqOperatorSplitting 0.4 leaves `sol.stats` at zero. `integrator.stats` counts
+accepted steps under any splitting algorithm, adaptive ones included.
+"""
+function simulate(grid, f)
     diagpts, diagdist = diagonal_points()
     probes = [node_index(grid, x) for x in vcat(collect(P_REF), diagpts)]
     activation = fill(NaN, length(probes))
 
-    snaps = NamedTuple[]
-    nstep, next_snap = 0, 1
-    tstart = time_ns()
-
-    while integrator.t < TEND - DT / 2
-        step!(integrator, DT, true)
-        nstep += 1
-
-        if nstep % SAMPLE_EVERY == 0
-            φ = getvariable(integrator.u, f, :φₘ)
-            @inbounds for (k, i) in enumerate(probes)
-                isnan(activation[k]) &&
-                    φ[i] > V_ACTIVATION &&
-                    (activation[k] = integrator.t)
-            end
-        end
-
-        if next_snap <= length(SNAP_TIMES) && integrator.t >= SNAP_TIMES[next_snap]
-            φ = collect(getvariable(integrator.u, f, :φₘ))
-            push!(snaps, (t=integrator.t, V=reshape(φ, NCELLS...)))
-            lo, hi = extrema(φ)
-            pct = 100 * count(>(V_ACTIVATION), φ) / length(φ)
-            @printf "  t = %5.1f ms   φₘ ∈ [%7.2f, %6.2f] mV   %5.1f%% activated\n" integrator.t lo hi pct
-            next_snap += 1
+    record = StateObserver(; every=SAMPLE_EVERY) do u, t
+        φ = getvariable(u, f, :φₘ)
+        @inbounds for (k, i) in enumerate(probes)
+            isnan(activation[k]) && φ[i] > V_ACTIVATION && (activation[k] = t)
         end
     end
 
+    tstart = time_ns()
+    integrator = init(
+        OperatorSplittingProblem(f, create_initial_condition(f), (0.0, TEND)),
+        LieTrotterGodunov((Euler(), Euler()));
+        dt=DT,
+        saveat=SNAP_TIMES,
+        save_start=false,
+        save_end=false,
+        callback=record,
+    )
+    sol = solve!(integrator)
     wall = (time_ns() - tstart) * 1.0e-9
+
+    snaps = map(sol.t, sol[:φₘ]) do t, φ
+        lo, hi = extrema(φ)
+        pct = 100 * count(>(V_ACTIVATION), φ) / length(φ)
+        @printf "  t = %5.1f ms   φₘ ∈ [%7.2f, %6.2f] mV   %5.1f%% activated\n" t lo hi pct
+        (t=t, V=reshape(φ, NCELLS...))
+    end
+
+    nstep = integrator.stats.naccept
     cellsteps = prod(NCELLS) * nstep
     ms_per_step = 1.0e3 * wall / nstep
     ns_per_update = 1.0e9 * wall / cellsteps
-    @printf "  %d steps in %.1f s (%.2f ms/step, %.1f ns per cell-update)\n" nstep wall ms_per_step ns_per_update
+    @printf "  %d steps (TEND/DT = %d) in %.1f s (%.2f ms/step, %.1f ns per cell-update)\n" nstep round(Int, TEND / DT) wall ms_per_step ns_per_update
 
     return (; act_ref=activation[1:9], act_diag=activation[10:end], diagdist, snaps, wall)
 end

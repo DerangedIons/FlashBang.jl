@@ -57,14 +57,15 @@ if GPU_AVAILABLE
 
         # Then a real (short) solve through the splitting integrator.
         tend = 20.0
+        # Through `solve` and named indexing, so this also covers device arrays in
+        # `sol.u` and the symbolic-indexing hook on a device-resident `f`.
         solve_cable(f, u₀) = begin
-            integrator = init(
+            sol = solve(
                 OperatorSplittingProblem(f, u₀, (0.0, tend)),
                 LieTrotterGodunov((Euler(), Euler()));
                 dt,
             )
-            solve!(integrator)
-            return Array(getvariable(integrator.u, f, :φₘ))
+            return Array(sol[:φₘ, end])
         end
 
         φ_cpu = solve_cable(f_cpu, u_cpu)

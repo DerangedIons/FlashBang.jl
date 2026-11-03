@@ -14,7 +14,7 @@
 #   split = ReactionDiffusionSplit(model)                      how to split it
 #   f     = semidiscretize(split, FiniteDifferenceDiscretization(), grid)
 #   prob  = OperatorSplittingProblem(f, create_initial_condition(f), tspan)
-#   integ = init(prob, LieTrotterGodunov((Euler(), Euler())); dt)
+#   sol   = solve(prob, LieTrotterGodunov((Euler(), Euler())); dt, saveat)
 #
 # Run with:  julia --project=examples -t auto examples/cable_1d.jl
 
@@ -61,39 +61,32 @@ function build_cable()
 end
 
 """
-Step the cable to `TEND`, recording the first threshold crossing at every node and a
-snapshot of φₘ every `SAMPLE_EVERY` steps.
+Solve the cable to `TEND`, saving φₘ every `SAMPLE_EVERY` steps for the space-time map and
+recording the first threshold crossing at every node.
 
-The operator-splitting integrator does not implement the SciML solution interface, so
-output is driven by stepping it directly (`SciMLIterators.TimeChoiceIterator` is the other
-option when the sample times are known in advance).
+The snapshots are ordinary `saveat` points. Activation needs every step, which would be far
+too many full-state saves, so it is observed in flight by a [`StateObserver`](@ref)
+instead. `save_start = false` leaves the t = 0 frame out of the map, as before.
 """
 function run_cable(f)
-    integrator = init(
-        OperatorSplittingProblem(f, create_initial_condition(f), (0.0, TEND)),
-        LieTrotterGodunov((Euler(), Euler()));
-        dt=DT,
-    )
-
     activation = fill(NaN, NCELLS)
-    frames = Vector{Float64}[]
-    times = Float64[]
-    nstep = 0
-
-    while integrator.t < TEND - DT / 2
-        step!(integrator, DT, true)
-        nstep += 1
-        φ = getvariable(integrator.u, f, :φₘ)
+    record = StateObserver() do u, t
+        φ = getvariable(u, f, :φₘ)
         @inbounds for i in eachindex(activation)
-            isnan(activation[i]) && φ[i] > THRESHOLD && (activation[i] = integrator.t)
-        end
-        if nstep % SAMPLE_EVERY == 0
-            push!(frames, collect(φ))
-            push!(times, integrator.t)
+            isnan(activation[i]) && φ[i] > THRESHOLD && (activation[i] = t)
         end
     end
 
-    return (; activation, frames, times, φ_final=collect(getvariable(integrator.u, f, :φₘ)))
+    sol = solve(
+        OperatorSplittingProblem(f, create_initial_condition(f), (0.0, TEND)),
+        LieTrotterGodunov((Euler(), Euler()));
+        dt=DT,
+        saveat=SAMPLE_EVERY * DT,
+        save_start=false,
+        callback=record,
+    )
+
+    return (; activation, frames=sol[:φₘ], times=sol.t, φ_final=sol[:φₘ, end])
 end
 
 #--------------------------------------------------------------------------------# Reporting
