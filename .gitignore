@@ -9,3 +9,4 @@
 # own names precisely so a quick check cannot overwrite them.
 /examples/niederer_smoke_*
 /examples/*.mp4
+/docs/node_modules/

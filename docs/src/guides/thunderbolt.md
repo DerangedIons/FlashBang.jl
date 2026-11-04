@@ -6,7 +6,7 @@ CurrentModule = FlashBang
 
 FlashBang and [Thunderbolt.jl](https://github.com/JuliaHealth/Thunderbolt.jl) solve the same monodomain problem on different geometry: structured grids here, unstructured finite-element meshes there. FlashBang uses Thunderbolt's names for everything that describes the problem, so a model written for one reads the same in the other. Only the geometry and discretization lines change.
 
-The difference is at the end. Thunderbolt's tutorials step the integrator by hand. FlashBang's primary API is SciML's `solve` (see [The pipeline](@ref)). The hand-driven form is still fully supported, and this page covers it.
+The difference is at the end. Thunderbolt's tutorials step the integrator by hand. FlashBang's primary API is SciML's `solve` (see [Getting Started](../getting_started.md)). The hand-driven form is still fully supported, and this page covers it.
 
 ## Shared vocabulary
 
